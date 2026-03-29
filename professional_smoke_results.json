@@ -1,0 +1,142 @@
+[
+  {
+    "query": "did microsoft invest in openai",
+    "expected": "supported",
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.3627,
+      "contradicted": 0.0076,
+      "uncertain": 0.6297
+    },
+    "uncertainty": 0.1363,
+    "support_count": 6,
+    "contradict_count": 1,
+    "neutral_count": 1
+  },
+  {
+    "query": "did apple buy netflix",
+    "expected": "contradicted_or_uncertain",
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.2735,
+      "contradicted": 0.0247,
+      "uncertain": 0.7018
+    },
+    "uncertainty": 0.1296,
+    "support_count": 3,
+    "contradict_count": 0,
+    "neutral_count": 5
+  },
+  {
+    "query": "did nvidia attend ces 2025",
+    "expected": "supported",
+    "predicted_label": "supported",
+    "class_probabilities": {
+      "supported": 0.7235,
+      "contradicted": 0.0066,
+      "uncertain": 0.27
+    },
+    "uncertainty": 0.1123,
+    "support_count": 7,
+    "contradict_count": 1,
+    "neutral_count": 0
+  },
+  {
+    "query": "did openai hold an official keynote at ces 2025",
+    "expected": "contradicted_or_uncertain",
+    "predicted_label": "supported",
+    "class_probabilities": {
+      "supported": 0.6521,
+      "contradicted": 0.0239,
+      "uncertain": 0.324
+    },
+    "uncertainty": 0.1338,
+    "support_count": 6,
+    "contradict_count": 2,
+    "neutral_count": 0
+  },
+  {
+    "query": "is linux open source",
+    "expected": "supported",
+    "predicted_label": "supported",
+    "class_probabilities": {
+      "supported": 0.5185,
+      "contradicted": 0.0077,
+      "uncertain": 0.4738
+    },
+    "uncertainty": 0.1841,
+    "support_count": 8,
+    "contradict_count": 0,
+    "neutral_count": 0
+  },
+  {
+    "query": "is html a programming language",
+    "expected": "contradicted_or_uncertain",
+    "predicted_label": "supported",
+    "class_probabilities": {
+      "supported": 0.734,
+      "contradicted": 0.0018,
+      "uncertain": 0.2642
+    },
+    "uncertainty": 0.1215,
+    "support_count": 8,
+    "contradict_count": 0,
+    "neutral_count": 0
+  },
+  {
+    "query": "did github create git",
+    "expected": "contradicted_or_uncertain",
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.3759,
+      "contradicted": 0.1218,
+      "uncertain": 0.5022
+    },
+    "uncertainty": 0.1126,
+    "support_count": 4,
+    "contradict_count": 3,
+    "neutral_count": 1
+  },
+  {
+    "query": "did vaccines eradicate smallpox",
+    "expected": "supported",
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.4043,
+      "contradicted": 0.0127,
+      "uncertain": 0.5831
+    },
+    "uncertainty": 0.1326,
+    "support_count": 5,
+    "contradict_count": 2,
+    "neutral_count": 1
+  },
+  {
+    "query": "the moon landing happened in 1975",
+    "expected": "contradicted",
+    "predicted_label": "contradicted",
+    "class_probabilities": {
+      "supported": 0.0013,
+      "contradicted": 0.9658,
+      "uncertain": 0.033
+    },
+    "uncertainty": 0.0399,
+    "support_count": 1,
+    "contradict_count": 7,
+    "neutral_count": 0
+  },
+  {
+    "query": "alexander became king at age 30",
+    "expected": "contradicted",
+    "predicted_label": "contradicted",
+    "class_probabilities": {
+      "supported": 0.001,
+      "contradicted": 0.9823,
+      "uncertain": 0.0167
+    },
+    "uncertainty": 0.0243,
+    "support_count": 0,
+    "contradict_count": 8,
+    "neutral_count": 0
+  }
+]

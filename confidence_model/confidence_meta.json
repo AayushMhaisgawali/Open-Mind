@@ -1,0 +1,11 @@
+{
+  "input_dim": 29,
+  "hidden_1": 64,
+  "hidden_2": 32,
+  "dropout": 0.3,
+  "labels": {
+    "supported": 0,
+    "contradicted": 1,
+    "uncertain": 2
+  }
+}

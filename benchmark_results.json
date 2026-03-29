@@ -1,0 +1,182 @@
+[
+  {
+    "query": "Alexander became king at age 30",
+    "expected": "contradicted",
+    "claim": "Alexander became king at age 30.",
+    "support_count": 3,
+    "contradict_count": 5,
+    "neutral_count": 0,
+    "predicted_label": "contradicted",
+    "class_probabilities": {
+      "supported": 0.0068,
+      "contradicted": 0.9316,
+      "uncertain": 0.0616
+    },
+    "uncertainty": 0.0549
+  },
+  {
+    "query": "An octopus has two hearts",
+    "expected": "contradicted",
+    "claim": "An octopus has two hearts.",
+    "support_count": 3,
+    "contradict_count": 5,
+    "neutral_count": 0,
+    "predicted_label": "contradicted",
+    "class_probabilities": {
+      "supported": 0.0064,
+      "contradicted": 0.8981,
+      "uncertain": 0.0956
+    },
+    "uncertainty": 0.0818
+  },
+  {
+    "query": "did nvidia attend ces 2025",
+    "expected": "supported",
+    "claim": "NVIDIA attended CES 2025.",
+    "support_count": 7,
+    "contradict_count": 1,
+    "neutral_count": 0,
+    "predicted_label": "supported",
+    "class_probabilities": {
+      "supported": 0.8206,
+      "contradicted": 0.0044,
+      "uncertain": 0.175
+    },
+    "uncertainty": 0.1575
+  },
+  {
+    "query": "python was invented in 1991",
+    "expected": "supported",
+    "claim": "The Python programming language was invented in 1991.",
+    "support_count": 6,
+    "contradict_count": 1,
+    "neutral_count": 1,
+    "predicted_label": "supported",
+    "class_probabilities": {
+      "supported": 0.6648,
+      "contradicted": 0.008,
+      "uncertain": 0.3272
+    },
+    "uncertainty": 0.1572
+  },
+  {
+    "query": "did apple buy netflix",
+    "expected": "contradicted_or_uncertain",
+    "claim": "Apple acquired Netflix.",
+    "support_count": 2,
+    "contradict_count": 1,
+    "neutral_count": 5,
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.028,
+      "contradicted": 0.0131,
+      "uncertain": 0.9589
+    },
+    "uncertainty": 0.038
+  },
+  {
+    "query": "did openai have ces 2025 presence",
+    "expected": "uncertain_or_contradicted",
+    "claim": "OpenAI had a presence at CES 2025.",
+    "support_count": 8,
+    "contradict_count": 0,
+    "neutral_count": 0,
+    "predicted_label": "supported",
+    "class_probabilities": {
+      "supported": 0.8599,
+      "contradicted": 0.0009,
+      "uncertain": 0.1392
+    },
+    "uncertainty": 0.1233
+  },
+  {
+    "query": "is water made of hydrogen and oxygen",
+    "expected": "supported",
+    "claim": "Water is composed of hydrogen and oxygen.",
+    "support_count": 6,
+    "contradict_count": 0,
+    "neutral_count": 2,
+    "predicted_label": "supported",
+    "class_probabilities": {
+      "supported": 0.8869,
+      "contradicted": 0.0016,
+      "uncertain": 0.1115
+    },
+    "uncertainty": 0.062
+  },
+  {
+    "query": "the moon landing happened in 1975",
+    "expected": "contradicted",
+    "claim": "The moon landing occurred in 1975.",
+    "support_count": 1,
+    "contradict_count": 7,
+    "neutral_count": 0,
+    "predicted_label": "contradicted",
+    "class_probabilities": {
+      "supported": 0.0007,
+      "contradicted": 0.9722,
+      "uncertain": 0.0271
+    },
+    "uncertainty": 0.0288
+  },
+  {
+    "query": "was youtube launched after tiktok",
+    "expected": "contradicted",
+    "claim": "YouTube was launched after TikTok.",
+    "support_count": 5,
+    "contradict_count": 1,
+    "neutral_count": 2,
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.3964,
+      "contradicted": 0.0031,
+      "uncertain": 0.6006
+    },
+    "uncertainty": 0.184
+  },
+  {
+    "query": "is the european union a country",
+    "expected": "contradicted",
+    "claim": "The European Union is a country.",
+    "support_count": 2,
+    "contradict_count": 1,
+    "neutral_count": 5,
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.0203,
+      "contradicted": 0.0029,
+      "uncertain": 0.9768
+    },
+    "uncertainty": 0.024
+  },
+  {
+    "query": "did vaccines eradicate smallpox",
+    "expected": "supported",
+    "claim": "Vaccines eradicated smallpox.",
+    "support_count": 5,
+    "contradict_count": 1,
+    "neutral_count": 2,
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.4765,
+      "contradicted": 0.0088,
+      "uncertain": 0.5147
+    },
+    "uncertainty": 0.1927
+  },
+  {
+    "query": "was mount everest in africa",
+    "expected": "contradicted",
+    "claim": "Mount Everest was located in Africa.",
+    "support_count": 3,
+    "contradict_count": 3,
+    "neutral_count": 2,
+    "predicted_label": "uncertain",
+    "class_probabilities": {
+      "supported": 0.0436,
+      "contradicted": 0.1161,
+      "uncertain": 0.8403
+    },
+    "uncertainty": 0.1545
+  }
+]
