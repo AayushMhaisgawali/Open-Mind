@@ -67,3 +67,12 @@ A domain-specific benchmark set is available at:
 - `professional_benchmark_queries.txt`
 
 Use it to regenerate a confidence dataset aligned with the target audience.
+
+## Deployment
+
+For production deployment:
+
+- deploy `web_intelegence` to Vercel
+- deploy the FastAPI backend from the repository root to a Python-friendly host
+
+Deployment notes are in `DEPLOY_VERCEL.md` and `DEPLOY_RENDER.md`.

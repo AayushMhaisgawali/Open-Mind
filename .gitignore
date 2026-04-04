@@ -2,3 +2,10 @@
 __pycache__/
 *.pyc
 evidence_classifier_model/
+api.err.log
+api.out.log
+web.err.log
+web.out.log
+web_intelegence/node_modules/
+web_intelegence/dist/
+web_intelegence/.vercel/
