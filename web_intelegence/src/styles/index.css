@@ -1,0 +1,133 @@
+
+@import './tailwind.css';
+
+:root {
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --border: #f1f5f9;
+  
+  /* Vibrant Palette */
+  --ag-yellow: #feda75;
+  --ag-orange: #fa7e1e;
+  --ag-pink: #d62976;
+  --ag-purple: #962fbf;
+  --ag-blue: #4f5bd5;
+  
+  --primary: var(--ag-blue);
+  --success: var(--ag-pink);
+  
+  --text-main: #1e293b;
+  --text-dim: #64748b;
+  --text-light: #94a3b8;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--text-main);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  overflow-x: hidden;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+code, .font-mono {
+  font-family: 'Space Mono', monospace;
+}
+
+/* Typography Scale */
+h1 { font-weight: 800; }
+h2 { font-weight: 700; }
+h3 { font-weight: 600; }
+
+.label-caps {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-light);
+}
+
+/* Vibrant Gradient Utility */
+.vibrant-gradient {
+  background: linear-gradient(45deg, #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5);
+  background-size: 200% auto;
+  transition: 0.5s;
+  color: white;
+}
+
+.vibrant-gradient:hover {
+  background-position: right center;
+}
+
+/* Scrollbar Handling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ag-pink) rgba(250, 126, 30, 0.12);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(250, 126, 30, 0.10);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--ag-orange), var(--ag-pink));
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.75);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--ag-yellow), var(--ag-pink));
+}
+
+/* Grid & Layout System */
+.p-stage { padding: 32px; }
+.g-gap { gap: 24px; }
+
+/* Functional Card Utility */
+.ag-surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ag-surface:hover {
+  border-color: #f1f5f9;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+/* Interactive Input States */
+.ag-field {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.ag-field:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: var(--ag-pink);
+  box-shadow: 0 0 0 4px rgba(214, 41, 118, 0.1);
+}
+
+/* Terminal Log Formatting */
+.log-frame {
+  background: #0f172a;
+  border-radius: 12px;
+  color: #f1f5f9;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  padding: 20px;
+  line-height: 1.6;
+}
