@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import sys
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+import httpx
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -30,6 +33,10 @@ DEFAULT_MODEL_DIR = "confidence_model"
 SUPPORTED_PROVIDERS = {"duckduckgo", "serpapi"}
 GraphGroup = Literal["person", "organization", "media", "government", "event"]
 SourceStance = Literal["support", "contradict", "neutral"]
+DEMO_DAILY_QUERY_LIMIT = 5
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
+SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
 
 
 class VerifyRequest(BaseModel):
@@ -151,6 +158,109 @@ def _trim(text: str, limit: int = 220) -> str:
     if len(compact) <= limit:
         return compact
     return compact[:limit].rsplit(" ", 1)[0].rstrip(".,;: ") + "..."
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header.")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status_code=401, detail="Authorization header must be a Bearer token.")
+    return token.strip()
+
+
+def _supabase_headers(api_key: str, bearer: str | None = None) -> dict[str, str]:
+    headers = {"apikey": api_key}
+    if bearer:
+        headers["Authorization"] = f"Bearer {bearer}"
+    return headers
+
+
+def _require_supabase_env() -> None:
+    if not SUPABASE_URL or not SUPABASE_PUBLISHABLE_KEY or not SUPABASE_SECRET_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Supabase quota enforcement is not configured. Add SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, and SUPABASE_SECRET_KEY.",
+        )
+
+
+def _get_authenticated_user(access_token: str) -> dict[str, Any]:
+    _require_supabase_env()
+    response = httpx.get(
+        f"{SUPABASE_URL}/auth/v1/user",
+        headers=_supabase_headers(SUPABASE_PUBLISHABLE_KEY, access_token),
+        timeout=10.0,
+    )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=401, detail="Invalid or expired user session.")
+    return response.json()
+
+
+def _get_admin_meta(user_id: str) -> dict[str, Any] | None:
+    response = httpx.get(
+        f"{SUPABASE_URL}/rest/v1/admin_user_meta",
+        headers={
+            **_supabase_headers(SUPABASE_SECRET_KEY, SUPABASE_SECRET_KEY),
+            "Accept": "application/json",
+        },
+        params={
+            "select": "user_id,is_blocked,role,plan",
+            "user_id": f"eq.{user_id}",
+            "limit": "1",
+        },
+        timeout=10.0,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return payload[0] if payload else None
+
+
+def _get_daily_investigation_count(user_id: str) -> int:
+    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    response = httpx.get(
+        f"{SUPABASE_URL}/rest/v1/investigations",
+        headers={
+            **_supabase_headers(SUPABASE_SECRET_KEY, SUPABASE_SECRET_KEY),
+            "Range-Unit": "items",
+            "Range": "0-0",
+            "Prefer": "count=exact",
+        },
+        params={
+            "select": "id",
+            "user_id": f"eq.{user_id}",
+            "and": f"(created_at.gte.{day_start.isoformat()},created_at.lt.{day_end.isoformat()})",
+        },
+        timeout=10.0,
+    )
+    response.raise_for_status()
+    content_range = response.headers.get("content-range", "0-0/0")
+    total = content_range.split("/")[-1]
+    try:
+        return int(total)
+    except ValueError:
+        return 0
+
+
+def enforce_demo_quota(access_token: str) -> dict[str, Any]:
+    user = _get_authenticated_user(access_token)
+    user_id = str(user["id"])
+    admin_meta = _get_admin_meta(user_id) or {}
+
+    if admin_meta.get("is_blocked") is True:
+        raise HTTPException(status_code=403, detail="Your account is blocked from running investigations.")
+
+    if admin_meta.get("role") == "admin":
+        return user
+
+    daily_count = _get_daily_investigation_count(user_id)
+    if daily_count >= DEMO_DAILY_QUERY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Demo limit reached. Free users can run {DEMO_DAILY_QUERY_LIMIT} investigations per day.",
+        )
+
+    return user
 
 
 def build_flow_graph(result: AutonomousVerificationResult, top_sources: list[DashboardSource]) -> DashboardGraph:
@@ -393,8 +503,10 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/verify", response_model=DashboardResponse)
-def verify(request: VerifyRequest) -> DashboardResponse:
+def verify(request: VerifyRequest, authorization: str | None = Header(default=None)) -> DashboardResponse:
     try:
+        access_token = _extract_bearer_token(authorization)
+        enforce_demo_quota(access_token)
         return _build_dashboard_response(request.query, request.provider)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -411,7 +523,9 @@ def verify(request: VerifyRequest) -> DashboardResponse:
 
 
 @app.post("/api/verify/stream")
-def verify_stream(request: VerifyRequest) -> StreamingResponse:
+def verify_stream(request: VerifyRequest, authorization: str | None = Header(default=None)) -> StreamingResponse:
+    access_token = _extract_bearer_token(authorization)
+    enforce_demo_quota(access_token)
     event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
     def emit(event_or_type: Any, **payload: Any) -> None:

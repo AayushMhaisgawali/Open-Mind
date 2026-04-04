@@ -10,6 +10,7 @@ import {
   submitFeedbackRecord,
   touchTrackedSession,
 } from '../lib/userData';
+import { supabase } from '../lib/supabase';
 
 interface Message {
   id: string;
@@ -536,14 +537,33 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
     };
 
     try {
+      const sessionData = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+      const accessToken = sessionData.data.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Your session expired. Please sign in again.');
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/verify/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ query, provider: 'duckduckgo' }),
       });
 
       if (!response.ok || !response.body) {
         const payload = await response.json().catch(() => ({}));
+        if (response.status === 429) {
+          throw new Error(payload?.detail || 'Demo limit reached. Free users can run 5 investigations per day.');
+        }
+        if (response.status === 401) {
+          throw new Error(payload?.detail || 'Please sign in again to continue.');
+        }
+        if (response.status === 403) {
+          throw new Error(payload?.detail || 'Your account cannot run investigations right now.');
+        }
         throw new Error(payload?.detail || 'The verification request failed.');
       }
 
