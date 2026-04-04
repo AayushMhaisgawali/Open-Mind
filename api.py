@@ -229,6 +229,7 @@ def _get_daily_investigation_count(user_id: str) -> int:
         params={
             "select": "id",
             "user_id": f"eq.{user_id}",
+            "status": "neq.started",
             "and": f"(created_at.gte.{day_start.isoformat()},created_at.lt.{day_end.isoformat()})",
         },
         timeout=10.0,

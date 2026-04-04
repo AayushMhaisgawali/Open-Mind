@@ -5,6 +5,7 @@ import { OneMindLogo } from './OneMindLogo';
 import {
   createInvestigationRecord,
   finalizeInvestigationRecord,
+  getDailyUsageSummary,
   recordInvestigationEvent,
   recordSourceClick,
   submitFeedbackRecord,
@@ -198,6 +199,12 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackBusy, setFeedbackBusy] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState('');
+  const [usageSummary, setUsageSummary] = useState({
+    isAdmin: false,
+    isBlocked: false,
+    usedToday: 0,
+    dailyLimit: 5,
+  });
 
   useEffect(() => {
     if ('scrollRestoration' in window.history) {
@@ -235,6 +242,17 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
     setFeedbackComment('');
     setFeedbackStatus('');
   }, [result?.query]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const loadUsage = async () => {
+      const summary = await getDailyUsageSummary(userId);
+      setUsageSummary(summary);
+    };
+
+    void loadUsage();
+  }, [userId, result?.query]);
 
   const statusRows = useMemo(() => {
     const counts = result?.counts ?? liveCounts;
@@ -708,6 +726,17 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {!usageSummary.isAdmin ? (
+            <>
+              <div className="hidden rounded-full border border-orange-100 bg-orange-50 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#f59e0b] md:inline-flex">
+                Demo account: {usageSummary.dailyLimit} investigations per day
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600">
+                <span className="text-slate-400">Usage</span>
+                <span className="text-slate-900">{usageSummary.usedToday} / {usageSummary.dailyLimit}</span>
+              </div>
+            </>
+          ) : null}
           {onBack ? (
             <button
               onClick={onBack}
@@ -856,6 +885,28 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
           </div>
 
           <div className="mt-8 flex flex-col gap-6 shrink-0">
+            {!usageSummary.isAdmin ? (
+              <div className="rounded-[20px] border border-orange-100 bg-[linear-gradient(135deg,_rgba(255,247,237,0.95),_rgba(255,255,255,1))] p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#f59e0b]">Demo Quota</p>
+                    <h3 className="mt-2 text-lg font-black tracking-tight text-slate-900">
+                      {usageSummary.usedToday} of {usageSummary.dailyLimit} investigations used today
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      This demo includes {usageSummary.dailyLimit} investigations per day for standard users. Your limit resets daily.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-orange-100 bg-white px-4 py-3 text-right shadow-sm">
+                    <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Remaining</span>
+                    <span className="mt-1 block text-2xl font-black text-slate-900">
+                      {Math.max(usageSummary.dailyLimit - usageSummary.usedToday, 0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="bg-white rounded-[20px] p-8 shadow-sm border border-slate-100 flex flex-col">
               <div className="mb-6">
                 <span className="text-[18px] font-black uppercase tracking-[0.2em] text-slate-400">Status Alignment</span>

@@ -307,3 +307,41 @@ export const submitFeedbackRecord = async ({
 
   return { ok: true };
 };
+
+export const getDailyUsageSummary = async (userId: string) => {
+  if (!supabase) {
+    return {
+      isAdmin: false,
+      isBlocked: false,
+      usedToday: 0,
+      dailyLimit: 5,
+    };
+  }
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  const [{ data: adminMeta }, { count }] = await Promise.all([
+    supabase
+      .from('admin_user_meta')
+      .select('role,is_blocked')
+      .eq('user_id', userId)
+      .maybeSingle(),
+    supabase
+      .from('investigations')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .neq('status', 'started')
+      .gte('created_at', dayStart.toISOString())
+      .lt('created_at', dayEnd.toISOString()),
+  ]);
+
+  return {
+    isAdmin: adminMeta?.role === 'admin',
+    isBlocked: adminMeta?.is_blocked === true,
+    usedToday: count ?? 0,
+    dailyLimit: 5,
+  };
+};
