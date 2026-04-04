@@ -207,6 +207,12 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
     dailyLimit: 5,
   });
 
+  const refreshUsageSummary = async () => {
+    if (!userId) return;
+    const summary = await getDailyUsageSummary(userId);
+    setUsageSummary(summary);
+  };
+
   useEffect(() => {
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
@@ -245,15 +251,8 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
   }, [result?.query]);
 
   useEffect(() => {
-    if (!userId) return;
-
-    const loadUsage = async () => {
-      const summary = await getDailyUsageSummary(userId);
-      setUsageSummary(summary);
-    };
-
-    void loadUsage();
-  }, [userId, result?.query]);
+    void refreshUsageSummary();
+  }, [userId]);
 
   const statusRows = useMemo(() => {
     const counts = result?.counts ?? liveCounts;
@@ -476,19 +475,22 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
         appendProcessing(`Final verdict: ${verification.verdict.label}.`);
         completedInvestigationsRef.current += 1;
         if (activeInvestigationRef.current?.id) {
-          void finalizeInvestigationRecord({
-            investigationId: activeInvestigationRef.current.id,
-            assistantMessage: verification.assistant_message,
-            answer: verification.final_answer.direct_answer,
-            sources: verification.sources,
-            result: verification,
-            verdictLabel: verification.verdict.label,
-            confidence: verification.verdict.confidence,
-            uncertainty: verification.verdict.uncertainty,
-            retriesUsed: verification.verdict.retries_used,
-            durationMs: Date.now() - activeInvestigationRef.current.startedAt,
-            status: 'completed',
-          });
+          void (async () => {
+            await finalizeInvestigationRecord({
+              investigationId: activeInvestigationRef.current!.id!,
+              assistantMessage: verification.assistant_message,
+              answer: verification.final_answer.direct_answer,
+              sources: verification.sources,
+              result: verification,
+              verdictLabel: verification.verdict.label,
+              confidence: verification.verdict.confidence,
+              uncertainty: verification.verdict.uncertainty,
+              retriesUsed: verification.verdict.retries_used,
+              durationMs: Date.now() - activeInvestigationRef.current!.startedAt,
+              status: 'completed',
+            });
+            await refreshUsageSummary();
+          })();
         }
         void touchTrackedSession(trackedSessionId);
         break;
@@ -641,6 +643,7 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
           durationMs: Date.now() - activeInvestigationRef.current.startedAt,
           errorMessage: message,
         });
+        await refreshUsageSummary();
       }
     } finally {
       requestAbortRef.current = null;
