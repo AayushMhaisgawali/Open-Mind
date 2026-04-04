@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw, Globe, Activity, AlertTriangle, ArrowLeft, LogOut, Copy, Share2, ThumbsDown, ThumbsUp, Star } from 'lucide-react';
+import { RefreshCw, Globe, Activity, AlertTriangle, ArrowLeft, LogOut, Copy, Share2, ThumbsDown, ThumbsUp, Star, Square } from 'lucide-react';
 import { MindPixelsGraph, DashboardGraphLink, DashboardGraphNode } from './MindPixelsGraph';
 import { OneMindLogo } from './OneMindLogo';
 import {
@@ -186,6 +186,7 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const workspaceScrollRef = useRef<HTMLElement>(null);
   const lastSourceRef = useRef<string | null>(null);
+  const requestAbortRef = useRef<AbortController | null>(null);
   const activeInvestigationRef = useRef<{
     id: string | null;
     query: string;
@@ -553,6 +554,7 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
       copied: false,
       shared: false,
     };
+    requestAbortRef.current = new AbortController();
 
     try {
       const sessionData = supabase ? await supabase.auth.getSession() : { data: { session: null } };
@@ -568,6 +570,7 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
+        signal: requestAbortRef.current.signal,
         body: JSON.stringify({ query, provider: 'duckduckgo' }),
       });
 
@@ -607,6 +610,19 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
         handleStreamEvent(JSON.parse(buffer.trim()) as StreamEvent);
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: 'Investigation stopped.',
+            timestamp: new Date(),
+          },
+        ]);
+        setFeedbackStatus('Investigation stopped.');
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Something went wrong while contacting the backend.';
       setError(message);
       setMessages((prev) => [
@@ -627,8 +643,13 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
         });
       }
     } finally {
+      requestAbortRef.current = null;
       setIsThinking(false);
     }
+  };
+
+  const handleStopInvestigation = () => {
+    requestAbortRef.current?.abort();
   };
 
   const handleCopyAnswer = async () => {
@@ -851,11 +872,22 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
                 className="flex-1 bg-transparent border-none focus:ring-0 resize-none min-h-[24px] max-h-[140px] overflow-y-auto text-[15px] leading-6 font-medium text-slate-800 placeholder:text-slate-400 p-0 focus:outline-none"
               />
               <button
-                onClick={handleSendMessage}
-                disabled={!inputText.trim() || isThinking}
-                className="group w-12 h-12 rounded-full bg-white border border-orange-100 text-[#f59e0b] flex items-center justify-center shadow-md shadow-orange-100/70 hover:shadow-lg hover:bg-[#f59e0b] hover:text-white hover:border-[#f59e0b] hover:scale-105 active:scale-95 transition-all disabled:opacity-30 disabled:scale-100 shrink-0"
+                onClick={isThinking ? handleStopInvestigation : handleSendMessage}
+                disabled={!isThinking && !inputText.trim()}
+                className={`group h-12 shrink-0 rounded-full border flex items-center justify-center shadow-md transition-all active:scale-95 ${
+                  isThinking
+                    ? 'min-w-[96px] gap-2 border-rose-200 bg-white px-4 text-rose-600 shadow-rose-100/70 hover:bg-rose-50 hover:shadow-lg'
+                    : 'w-12 border-orange-100 bg-white text-[#f59e0b] shadow-orange-100/70 hover:shadow-lg hover:bg-[#f59e0b] hover:text-white hover:border-[#f59e0b] hover:scale-105'
+                } disabled:opacity-30 disabled:scale-100`}
               >
-                <OneMindLogo size={24} className="transition-all group-hover:scale-105" />
+                {isThinking ? (
+                  <>
+                    <Square size={14} className="fill-current" />
+                    <span className="text-xs font-black uppercase tracking-[0.18em]">Stop</span>
+                  </>
+                ) : (
+                  <OneMindLogo size={24} className="transition-all group-hover:scale-105" />
+                )}
               </button>
             </div>
           </div>
