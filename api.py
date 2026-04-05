@@ -21,7 +21,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from claim_engine.autonomous_pipeline import AutonomousVerificationRunner, AutonomousVerificationResult
-from claim_engine.confidence_model import MonteCarloConfidenceModel
+from claim_engine.confidence_model import MonteCarloConfidenceModel, TORCH_AVAILABLE
 from claim_engine.evidence import EvidenceAnalysisError, OpenAIEvidenceAnalyzer
 from claim_engine.final_summarizer import FinalSummarizationError, OpenAIFinalSummarizer
 from claim_engine.parser import ContentExtractionAgent, ParsingError
@@ -37,6 +37,7 @@ DEMO_DAILY_QUERY_LIMIT = 5
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
 SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
+REQUIRE_REAL_CONFIDENCE_MODEL = os.getenv("REQUIRE_REAL_CONFIDENCE_MODEL", "true").strip().lower() not in {"0", "false", "no"}
 
 
 class VerifyRequest(BaseModel):
@@ -121,8 +122,16 @@ class DashboardResponse(BaseModel):
 _CONFIDENCE_MODEL: MonteCarloConfidenceModel | None = None
 
 
+def get_confidence_engine() -> str:
+    return "torch_model" if TORCH_AVAILABLE else "heuristic_fallback"
+
+
 def get_confidence_model() -> MonteCarloConfidenceModel:
     global _CONFIDENCE_MODEL
+    if REQUIRE_REAL_CONFIDENCE_MODEL and not TORCH_AVAILABLE:
+        raise RuntimeError(
+            "Real confidence model inference is required, but torch is not installed in this environment."
+        )
     if _CONFIDENCE_MODEL is None:
         _CONFIDENCE_MODEL = MonteCarloConfidenceModel.load(DEFAULT_MODEL_DIR)
     return _CONFIDENCE_MODEL
@@ -499,8 +508,22 @@ app.add_middleware(
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, Any]:
+    model_loaded = False
+    model_error: str | None = None
+    try:
+        get_confidence_model()
+        model_loaded = True
+    except Exception as exc:
+        model_error = str(exc)
+
+    return {
+        "status": "ok" if model_loaded or not REQUIRE_REAL_CONFIDENCE_MODEL else "degraded",
+        "confidence_engine": get_confidence_engine(),
+        "require_real_confidence_model": REQUIRE_REAL_CONFIDENCE_MODEL,
+        "model_loaded": model_loaded,
+        "model_error": model_error,
+    }
 
 
 @app.post("/api/verify", response_model=DashboardResponse)
