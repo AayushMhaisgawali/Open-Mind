@@ -22,6 +22,8 @@
         sync: false
       - key: REQUIRE_REAL_CONFIDENCE_MODEL
         value: "true"
+      - key: REQUIRE_REAL_EVIDENCE_MODEL
+        value: "true"
       - key: SERPAPI_API_KEY
         sync: false
       - key: SERPAPI_GOOGLE_DOMAIN

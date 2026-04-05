@@ -23,6 +23,7 @@ if str(SRC) not in sys.path:
 from claim_engine.autonomous_pipeline import AutonomousVerificationRunner, AutonomousVerificationResult
 from claim_engine.confidence_model import MonteCarloConfidenceModel, TORCH_AVAILABLE
 from claim_engine.evidence import EvidenceAnalysisError, OpenAIEvidenceAnalyzer
+from claim_engine.evidence_classifier import EvidenceClassifier, TRANSFORMERS_AVAILABLE
 from claim_engine.final_summarizer import FinalSummarizationError, OpenAIFinalSummarizer
 from claim_engine.parser import ContentExtractionAgent, ParsingError
 from claim_engine.query_refiner import QueryRefinementError
@@ -38,6 +39,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
 SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
 REQUIRE_REAL_CONFIDENCE_MODEL = os.getenv("REQUIRE_REAL_CONFIDENCE_MODEL", "true").strip().lower() not in {"0", "false", "no"}
+REQUIRE_REAL_EVIDENCE_MODEL = os.getenv("REQUIRE_REAL_EVIDENCE_MODEL", "true").strip().lower() not in {"0", "false", "no"}
 
 
 class VerifyRequest(BaseModel):
@@ -120,10 +122,23 @@ class DashboardResponse(BaseModel):
 
 
 _CONFIDENCE_MODEL: MonteCarloConfidenceModel | None = None
+_EVIDENCE_CLASSIFIER: EvidenceClassifier | None = None
 
 
 def get_confidence_engine() -> str:
     return "torch_model" if TORCH_AVAILABLE else "heuristic_fallback"
+
+
+def get_evidence_classifier() -> EvidenceClassifier:
+    global _EVIDENCE_CLASSIFIER
+    if _EVIDENCE_CLASSIFIER is None:
+        _EVIDENCE_CLASSIFIER = EvidenceClassifier()
+    return _EVIDENCE_CLASSIFIER
+
+
+def get_evidence_engine() -> str:
+    classifier = get_evidence_classifier()
+    return "evidence_model" if classifier.loaded else "heuristic_fallback"
 
 
 def get_confidence_model() -> MonteCarloConfidenceModel:
@@ -135,6 +150,14 @@ def get_confidence_model() -> MonteCarloConfidenceModel:
     if _CONFIDENCE_MODEL is None:
         _CONFIDENCE_MODEL = MonteCarloConfidenceModel.load(DEFAULT_MODEL_DIR)
     return _CONFIDENCE_MODEL
+
+
+def require_evidence_model() -> None:
+    classifier = get_evidence_classifier()
+    if REQUIRE_REAL_EVIDENCE_MODEL and (not TRANSFORMERS_AVAILABLE or not classifier.loaded):
+        raise RuntimeError(
+            "Real evidence model inference is required, but the evidence classifier is not loaded in this environment."
+        )
 
 
 def determine_source_group(domain: str) -> GraphGroup:
@@ -380,6 +403,9 @@ def _build_dashboard_response(query: str, provider: str, emit: callable | None =
     if provider not in SUPPORTED_PROVIDERS:
         raise ValueError(f"Unsupported provider: {provider}")
 
+    require_evidence_model()
+    confidence_model = get_confidence_model()
+
     if emit:
         emit("investigation_started", query=query, provider=provider)
     claim = OpenAIClaimStructurer().structure(query)
@@ -403,7 +429,7 @@ def _build_dashboard_response(query: str, provider: str, emit: callable | None =
         progress_callback=None,
         event_callback=emit,
     )
-    result = runner.run(claim, get_confidence_model())
+    result = runner.run(claim, confidence_model)
     final_answer = OpenAIFinalSummarizer().summarize(
         claim=result.claim,
         evidence=result.evidence,
@@ -509,20 +535,37 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    model_loaded = False
-    model_error: str | None = None
+    confidence_model_loaded = False
+    confidence_model_error: str | None = None
+    evidence_model_loaded = False
+    evidence_model_error: str | None = None
     try:
         get_confidence_model()
-        model_loaded = True
+        confidence_model_loaded = True
     except Exception as exc:
-        model_error = str(exc)
+        confidence_model_error = str(exc)
+
+    try:
+        require_evidence_model()
+        evidence_model_loaded = True
+    except Exception as exc:
+        evidence_model_error = str(exc)
 
     return {
-        "status": "ok" if model_loaded or not REQUIRE_REAL_CONFIDENCE_MODEL else "degraded",
+        "status": (
+            "ok"
+            if (confidence_model_loaded or not REQUIRE_REAL_CONFIDENCE_MODEL)
+            and (evidence_model_loaded or not REQUIRE_REAL_EVIDENCE_MODEL)
+            else "degraded"
+        ),
         "confidence_engine": get_confidence_engine(),
+        "evidence_engine": get_evidence_engine(),
         "require_real_confidence_model": REQUIRE_REAL_CONFIDENCE_MODEL,
-        "model_loaded": model_loaded,
-        "model_error": model_error,
+        "require_real_evidence_model": REQUIRE_REAL_EVIDENCE_MODEL,
+        "confidence_model_loaded": confidence_model_loaded,
+        "confidence_model_error": confidence_model_error,
+        "evidence_model_loaded": evidence_model_loaded,
+        "evidence_model_error": evidence_model_error,
     }
 
 
