@@ -1,7 +1,6 @@
 .env
 __pycache__/
 *.pyc
-evidence_classifier_model/
 api.err.log
 api.out.log
 web.err.log
