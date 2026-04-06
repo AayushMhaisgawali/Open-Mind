@@ -57,6 +57,7 @@ class EvidenceClassifier:
         default_model_path = project_root / 'evidence_classifier_model'
         self.model_path = Path(model_path or os.getenv('EVIDENCE_MODEL_PATH') or default_model_path)
         self.loaded = False
+        self.load_error: str | None = None
         self.tokenizer = None
         self.model = None
         self.config: dict[str, object] = {}
@@ -64,7 +65,11 @@ class EvidenceClassifier:
         self._try_load()
 
     def _try_load(self) -> None:
-        if not TRANSFORMERS_AVAILABLE or not self.model_path.exists():
+        if not TRANSFORMERS_AVAILABLE:
+            self.load_error = 'transformers/torch dependencies are unavailable.'
+            return
+        if not self.model_path.exists():
+            self.load_error = f'Evidence model path not found: {self.model_path}'
             return
         try:
             try:
@@ -78,8 +83,10 @@ class EvidenceClassifier:
             if config_path.exists():
                 self.config = json.loads(config_path.read_text(encoding='utf-8'))
             self.loaded = True
-        except Exception:
+            self.load_error = None
+        except Exception as exc:
             self.loaded = False
+            self.load_error = f'{type(exc).__name__}: {exc}'
             self.tokenizer = None
             self.model = None
             self.config = {}

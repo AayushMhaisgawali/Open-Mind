@@ -155,8 +155,9 @@ def get_confidence_model() -> MonteCarloConfidenceModel:
 def require_evidence_model() -> None:
     classifier = get_evidence_classifier()
     if REQUIRE_REAL_EVIDENCE_MODEL and (not TRANSFORMERS_AVAILABLE or not classifier.loaded):
+        detail = classifier.load_error or "Evidence classifier did not load."
         raise RuntimeError(
-            "Real evidence model inference is required, but the evidence classifier is not loaded in this environment."
+            f"Real evidence model inference is required, but the evidence classifier is not loaded in this environment. {detail}"
         )
 
 
