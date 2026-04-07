@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -568,6 +568,11 @@ def health() -> dict[str, Any]:
         "evidence_model_loaded": evidence_model_loaded,
         "evidence_model_error": evidence_model_error,
     }
+
+
+@app.head("/api/health")
+def health_head() -> Response:
+    return Response(status_code=200)
 
 
 @app.post("/api/verify", response_model=DashboardResponse)
