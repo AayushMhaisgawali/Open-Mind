@@ -6,6 +6,8 @@ import os
 import re
 from pathlib import Path
 
+import httpx
+
 try:
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -56,6 +58,9 @@ class EvidenceClassifier:
         project_root = Path(__file__).resolve().parents[2]
         default_model_path = project_root / 'evidence_classifier_model'
         self.model_path = Path(model_path or os.getenv('EVIDENCE_MODEL_PATH') or default_model_path)
+        self.endpoint_url = (os.getenv('EVIDENCE_ENDPOINT_URL') or '').strip()
+        self.endpoint_token = (os.getenv('EVIDENCE_ENDPOINT_TOKEN') or os.getenv('HF_TOKEN') or '').strip()
+        self.endpoint_timeout = float(os.getenv('EVIDENCE_ENDPOINT_TIMEOUT', '20'))
         self.loaded = False
         self.load_error: str | None = None
         self.tokenizer = None
@@ -65,6 +70,10 @@ class EvidenceClassifier:
         self._try_load()
 
     def _try_load(self) -> None:
+        if self.uses_remote_endpoint:
+            self.loaded = True
+            self.load_error = None
+            return
         if not TRANSFORMERS_AVAILABLE:
             self.load_error = 'transformers/torch dependencies are unavailable.'
             return
@@ -92,6 +101,11 @@ class EvidenceClassifier:
             self.config = {}
 
     def classify(self, claim: str, document_text: str) -> dict[str, object]:
+        if self.uses_remote_endpoint:
+            try:
+                return self._endpoint_classify(claim, document_text)
+            except Exception as exc:
+                self.load_error = f'{type(exc).__name__}: {exc}'
         if self.loaded:
             try:
                 result = self._ml_classify(claim, document_text)
@@ -99,6 +113,92 @@ class EvidenceClassifier:
             except Exception:
                 pass
         return self._apply_fact_consistency_overrides(claim, document_text, self._heuristic_classify(claim, document_text))
+
+    @property
+    def uses_remote_endpoint(self) -> bool:
+        return bool(self.endpoint_url)
+
+    def _endpoint_classify(self, claim: str, document_text: str) -> dict[str, object]:
+        headers = {'Content-Type': 'application/json'}
+        if self.endpoint_token:
+            headers['Authorization'] = f'Bearer {self.endpoint_token}'
+
+        payload = {
+            'inputs': {
+                'claim': claim,
+                'document_text': document_text[:1000],
+            }
+        }
+        response = httpx.post(
+            self.endpoint_url,
+            headers=headers,
+            json=payload,
+            timeout=self.endpoint_timeout,
+        )
+        response.raise_for_status()
+        parsed = response.json()
+        result = self._normalize_endpoint_response(parsed, document_text)
+        self.loaded = True
+        self.load_error = None
+        return result
+
+    def _normalize_endpoint_response(self, payload: object, document_text: str) -> dict[str, object]:
+        if isinstance(payload, list) and payload and isinstance(payload[0], dict) and 'label' in payload[0]:
+            probabilities = {
+                str(item.get('label', 'neutral')).lower(): round(float(item.get('score', 0.0)), 4)
+                for item in payload
+            }
+            label = max(probabilities.items(), key=lambda item: item[1])[0]
+            confidence = probabilities.get(label, 0.0)
+            return {
+                'label': label,
+                'confidence_score': round(float(confidence), 4),
+                'probabilities': self._fill_probabilities(probabilities),
+                'analysis_method': 'model',
+                'reasoning': self._template_reasoning(label, confidence),
+                'evidence_excerpt': self._extract_excerpt(document_text),
+            }
+
+        if not isinstance(payload, dict):
+            raise ValueError(f'Unexpected endpoint response type: {type(payload).__name__}')
+
+        label = str(payload.get('label') or 'neutral').lower()
+        if label not in {'support', 'contradict', 'neutral'}:
+            raise ValueError(f'Unsupported endpoint label: {label}')
+
+        confidence = float(payload.get('confidence_score', payload.get('score', 0.0)))
+        raw_probabilities = payload.get('probabilities') if isinstance(payload.get('probabilities'), dict) else {}
+        probabilities = {
+            str(key).lower(): round(float(value), 4)
+            for key, value in raw_probabilities.items()
+            if str(key).lower() in {'support', 'contradict', 'neutral'}
+        }
+        probabilities = self._fill_probabilities(probabilities, preferred_label=label, confidence=confidence)
+
+        return {
+            'label': label,
+            'confidence_score': round(confidence, 4),
+            'probabilities': probabilities,
+            'analysis_method': 'model',
+            'reasoning': str(payload.get('reasoning') or self._template_reasoning(label, confidence)),
+            'evidence_excerpt': str(payload.get('evidence_excerpt') or self._extract_excerpt(document_text)),
+        }
+
+    @staticmethod
+    def _fill_probabilities(
+        probabilities: dict[str, float],
+        *,
+        preferred_label: str | None = None,
+        confidence: float | None = None,
+    ) -> dict[str, float]:
+        ordered = {'support': 0.0, 'contradict': 0.0, 'neutral': 0.0}
+        ordered.update({key: max(0.0, min(1.0, value)) for key, value in probabilities.items() if key in ordered})
+        if preferred_label and ordered.get(preferred_label, 0.0) == 0.0 and confidence is not None:
+            ordered[preferred_label] = max(0.0, min(1.0, confidence))
+        total = sum(ordered.values())
+        if total <= 0:
+            return {'support': 0.33, 'contradict': 0.33, 'neutral': 0.34}
+        return {key: round(value / total, 4) for key, value in ordered.items()}
 
     def _ml_classify(self, claim: str, document_text: str) -> dict[str, object]:
         max_length = int(self.config.get('max_length', 320)) if self.config else 320

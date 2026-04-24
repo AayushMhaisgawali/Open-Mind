@@ -28,7 +28,7 @@ Render normally deploys from a Git repository, so you need one of these:
 - `pyproject.toml`
 - `render.yaml`
 
-You do not need `evidence_classifier_model/` for basic hosting because the code now falls back gracefully when that model is absent.
+You do not need `evidence_classifier_model/` on Render if you host the evidence model remotely through a Hugging Face inference endpoint.
 
 ## Render setup
 
@@ -49,11 +49,16 @@ Set these in Render:
 OPENAI_API_KEY=your_openai_key
 OPENAI_MODEL=gpt-5-mini
 RETRIEVAL_PROVIDER=duckduckgo
+EVIDENCE_ENDPOINT_URL=your_hugging_face_endpoint_url
+EVIDENCE_ENDPOINT_TOKEN=your_hugging_face_endpoint_token
+EVIDENCE_ENDPOINT_TIMEOUT=20
 SERPAPI_API_KEY=optional_if_using_serpapi
 SERPAPI_GOOGLE_DOMAIN=google.com
 SERPAPI_GL=us
 SERPAPI_HL=en
 ```
+
+If `EVIDENCE_ENDPOINT_URL` is set, the backend will use that remote evidence model instead of trying to load the heavy local `evidence_classifier_model/` folder on Render.
 
 ## After Render gives you a URL
 

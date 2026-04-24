@@ -24,6 +24,12 @@
         value: "true"
       - key: REQUIRE_REAL_EVIDENCE_MODEL
         value: "true"
+      - key: EVIDENCE_ENDPOINT_URL
+        sync: false
+      - key: EVIDENCE_ENDPOINT_TOKEN
+        sync: false
+      - key: EVIDENCE_ENDPOINT_TIMEOUT
+        value: "20"
       - key: SERPAPI_API_KEY
         sync: false
       - key: SERPAPI_GOOGLE_DOMAIN

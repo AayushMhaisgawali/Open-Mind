@@ -138,6 +138,8 @@ def get_evidence_classifier() -> EvidenceClassifier:
 
 def get_evidence_engine() -> str:
     classifier = get_evidence_classifier()
+    if classifier.uses_remote_endpoint:
+        return "hf_endpoint"
     return "evidence_model" if classifier.loaded else "heuristic_fallback"
 
 
