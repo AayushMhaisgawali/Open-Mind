@@ -107,6 +107,8 @@ const EMPTY_GRAPH = {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 const NETWORK_RETRY_DELAY_MS = 1800;
+const STREAM_REQUEST_ATTEMPTS = 2;
+const STANDARD_REQUEST_ATTEMPTS = 3;
 
 const waitFor = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -121,6 +123,9 @@ const isLikelyNetworkError = (error: unknown) => {
     message.includes('load failed')
   );
 };
+
+const userFacingNetworkMessage =
+  'Connection dropped while the investigation was running. Please retry in a few seconds.';
 
 const trimText = (value: string, limit = 180) => {
   const compact = (value || '').replace(/\s+/g, ' ').trim();
@@ -280,6 +285,9 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
 
   const sourceRows = result?.sources?.length ? result.sources : liveSources;
   const graphData = liveGraph.nodes.length ? liveGraph : result?.graph ?? EMPTY_GRAPH;
+  const displayedUsedToday = usageSummary.isAdmin
+    ? usageSummary.usedToday
+    : Math.min(usageSummary.usedToday, usageSummary.dailyLimit);
 
   const appendProcessing = (line: string) => {
     setProcessingStream((prev) => {
@@ -584,8 +592,34 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
       const signal = requestAbortRef.current.signal;
       await ensureBackendAwake(signal);
 
+      const fetchWithRetry = async (
+        url: string,
+        init: RequestInit,
+        attempts: number,
+      ): Promise<Response> => {
+        let lastError: unknown = null;
+        for (let attempt = 1; attempt <= attempts; attempt += 1) {
+          try {
+            const response = await fetch(url, init);
+            if (response.status >= 500 && attempt < attempts) {
+              await waitFor(NETWORK_RETRY_DELAY_MS * attempt);
+              continue;
+            }
+            return response;
+          } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') throw error;
+            lastError = error;
+            if (!isLikelyNetworkError(error) || attempt >= attempts) {
+              throw error;
+            }
+            await waitFor(NETWORK_RETRY_DELAY_MS * attempt);
+          }
+        }
+        throw lastError instanceof Error ? lastError : new Error(userFacingNetworkMessage);
+      };
+
       const runStream = async () => {
-        const response = await fetch(`${API_BASE_URL}/api/verify/stream`, {
+        const response = await fetchWithRetry(`${API_BASE_URL}/api/verify/stream`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -593,7 +627,7 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
           },
           signal,
           body: JSON.stringify({ query, provider: 'duckduckgo' }),
-        });
+        }, STREAM_REQUEST_ATTEMPTS);
 
         if (!response.ok || !response.body) {
           const message = await readErrorMessage(response, 'The verification stream request failed.');
@@ -615,7 +649,13 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
           for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) continue;
-            const event = JSON.parse(trimmed) as StreamEvent;
+            let event: StreamEvent | null = null;
+            try {
+              event = JSON.parse(trimmed) as StreamEvent;
+            } catch {
+              appendProcessing('Streaming chunk parse warning. Continuing...');
+              continue;
+            }
             if (event.type === 'final_result') {
               receivedFinalResult = true;
             }
@@ -624,7 +664,13 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
         }
 
         if (buffer.trim()) {
-          const event = JSON.parse(buffer.trim()) as StreamEvent;
+          let event: StreamEvent | null = null;
+          try {
+            event = JSON.parse(buffer.trim()) as StreamEvent;
+          } catch {
+            appendProcessing('Final stream chunk parse warning. Falling back to direct verify...');
+          }
+          if (!event) return receivedFinalResult;
           if (event.type === 'final_result') {
             receivedFinalResult = true;
           }
@@ -635,19 +681,10 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
       };
 
       let streamCompletedWithFinal = false;
-      try {
-        streamCompletedWithFinal = await runStream();
-      } catch (error) {
-        if (isLikelyNetworkError(error)) {
-          await waitFor(NETWORK_RETRY_DELAY_MS);
-          streamCompletedWithFinal = await runStream();
-        } else {
-          throw error;
-        }
-      }
+      streamCompletedWithFinal = await runStream();
 
       if (!streamCompletedWithFinal) {
-        const fallbackResponse = await fetch(`${API_BASE_URL}/api/verify`, {
+        const fallbackResponse = await fetchWithRetry(`${API_BASE_URL}/api/verify`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -655,7 +692,7 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
           },
           signal,
           body: JSON.stringify({ query, provider: 'duckduckgo' }),
-        });
+        }, STANDARD_REQUEST_ATTEMPTS);
 
         if (!fallbackResponse.ok) {
           const message = await readErrorMessage(fallbackResponse, 'The verification request failed.');
@@ -679,7 +716,8 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
         setFeedbackStatus('Investigation stopped.');
         return;
       }
-      const message = err instanceof Error ? err.message : 'Something went wrong while contacting the backend.';
+      const rawMessage = err instanceof Error ? err.message : 'Something went wrong while contacting the backend.';
+      const message = isLikelyNetworkError(err) ? userFacingNetworkMessage : rawMessage;
       setError(message);
       setMessages((prev) => [
         ...prev,
@@ -851,7 +889,7 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
               </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600">
                 <span className="text-slate-400">Usage</span>
-                <span className="text-slate-900">{usageSummary.usedToday} / {usageSummary.dailyLimit}</span>
+                <span className="text-slate-900">{displayedUsedToday} / {usageSummary.dailyLimit}</span>
               </div>
             </>
           ) : null}
