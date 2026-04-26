@@ -61,6 +61,9 @@ class EvidenceClassifier:
         self.endpoint_url = (os.getenv('EVIDENCE_ENDPOINT_URL') or '').strip()
         self.endpoint_token = (os.getenv('EVIDENCE_ENDPOINT_TOKEN') or os.getenv('HF_TOKEN') or '').strip()
         self.endpoint_timeout = float(os.getenv('EVIDENCE_ENDPOINT_TIMEOUT', '20'))
+        self.require_real_evidence_model = (
+            os.getenv('REQUIRE_REAL_EVIDENCE_MODEL', 'true').strip().lower() not in {'0', 'false', 'no'}
+        )
         self.loaded = False
         self.load_error: str | None = None
         self.tokenizer = None
@@ -106,12 +109,17 @@ class EvidenceClassifier:
                 return self._endpoint_classify(claim, document_text)
             except Exception as exc:
                 self.load_error = f'{type(exc).__name__}: {exc}'
+                if self.require_real_evidence_model:
+                    raise RuntimeError(
+                        f'Evidence endpoint inference failed while REQUIRE_REAL_EVIDENCE_MODEL is enabled: {self.load_error}'
+                    ) from exc
         if self.loaded:
             try:
                 result = self._ml_classify(claim, document_text)
                 return self._apply_fact_consistency_overrides(claim, document_text, result)
             except Exception:
-                pass
+                if self.require_real_evidence_model:
+                    raise RuntimeError('Local evidence model inference failed while REQUIRE_REAL_EVIDENCE_MODEL is enabled.')
         return self._apply_fact_consistency_overrides(claim, document_text, self._heuristic_classify(claim, document_text))
 
     @property

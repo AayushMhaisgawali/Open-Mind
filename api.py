@@ -40,6 +40,14 @@ SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
 SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
 REQUIRE_REAL_CONFIDENCE_MODEL = os.getenv("REQUIRE_REAL_CONFIDENCE_MODEL", "true").strip().lower() not in {"0", "false", "no"}
 REQUIRE_REAL_EVIDENCE_MODEL = os.getenv("REQUIRE_REAL_EVIDENCE_MODEL", "true").strip().lower() not in {"0", "false", "no"}
+FRONTEND_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "FRONTEND_ORIGINS",
+        "https://webintelegence.vercel.app,http://localhost:5173,http://localhost:4173",
+    ).split(",")
+    if origin.strip()
+]
 
 
 class VerifyRequest(BaseModel):
@@ -529,7 +537,8 @@ def _build_dashboard_response(query: str, provider: str, emit: callable | None =
 app = FastAPI(title="One Mind API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=FRONTEND_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

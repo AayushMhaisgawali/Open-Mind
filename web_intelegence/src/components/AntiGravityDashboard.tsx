@@ -106,6 +106,21 @@ const EMPTY_GRAPH = {
 };
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+const NETWORK_RETRY_DELAY_MS = 1800;
+
+const waitFor = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isLikelyNetworkError = (error: unknown) => {
+  if (error instanceof DOMException && error.name === 'AbortError') return false;
+  if (error instanceof TypeError) return true;
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('networkerror') ||
+    message.includes('network request failed') ||
+    message.includes('load failed')
+  );
+};
 
 const trimText = (value: string, limit = 180) => {
   const compact = (value || '').replace(/\s+/g, ' ').trim();
@@ -566,50 +581,89 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
         throw new Error('Your session expired. Please sign in again.');
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/verify/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        signal: requestAbortRef.current.signal,
-        body: JSON.stringify({ query, provider: 'duckduckgo' }),
-      });
+      const signal = requestAbortRef.current.signal;
+      await ensureBackendAwake(signal);
 
-      if (!response.ok || !response.body) {
-        const payload = await response.json().catch(() => ({}));
-        if (response.status === 429) {
-          throw new Error(payload?.detail || 'Demo limit reached. Free users can run 5 investigations per day.');
+      const runStream = async () => {
+        const response = await fetch(`${API_BASE_URL}/api/verify/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          signal,
+          body: JSON.stringify({ query, provider: 'duckduckgo' }),
+        });
+
+        if (!response.ok || !response.body) {
+          const message = await readErrorMessage(response, 'The verification stream request failed.');
+          throw new Error(message);
         }
-        if (response.status === 401) {
-          throw new Error(payload?.detail || 'Please sign in again to continue.');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let receivedFinalResult = false;
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            const event = JSON.parse(trimmed) as StreamEvent;
+            if (event.type === 'final_result') {
+              receivedFinalResult = true;
+            }
+            handleStreamEvent(event);
+          }
         }
-        if (response.status === 403) {
-          throw new Error(payload?.detail || 'Your account cannot run investigations right now.');
+
+        if (buffer.trim()) {
+          const event = JSON.parse(buffer.trim()) as StreamEvent;
+          if (event.type === 'final_result') {
+            receivedFinalResult = true;
+          }
+          handleStreamEvent(event);
         }
-        throw new Error(payload?.detail || 'The verification request failed.');
+
+        return receivedFinalResult;
+      };
+
+      let streamCompletedWithFinal = false;
+      try {
+        streamCompletedWithFinal = await runStream();
+      } catch (error) {
+        if (isLikelyNetworkError(error)) {
+          await waitFor(NETWORK_RETRY_DELAY_MS);
+          streamCompletedWithFinal = await runStream();
+        } else {
+          throw error;
+        }
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      if (!streamCompletedWithFinal) {
+        const fallbackResponse = await fetch(`${API_BASE_URL}/api/verify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          signal,
+          body: JSON.stringify({ query, provider: 'duckduckgo' }),
+        });
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          handleStreamEvent(JSON.parse(trimmed) as StreamEvent);
+        if (!fallbackResponse.ok) {
+          const message = await readErrorMessage(fallbackResponse, 'The verification request failed.');
+          throw new Error(message);
         }
-      }
 
-      if (buffer.trim()) {
-        handleStreamEvent(JSON.parse(buffer.trim()) as StreamEvent);
+        const verification = (await fallbackResponse.json()) as VerificationResponse;
+        handleStreamEvent({ type: 'final_result', payload: verification as unknown as Record<string, any> });
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -649,6 +703,46 @@ export const AntiGravityDashboard: React.FC<AntiGravityDashboardProps> = ({
       requestAbortRef.current = null;
       setIsThinking(false);
     }
+  };
+
+  const ensureBackendAwake = async (signal: AbortSignal) => {
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/health`, {
+          method: 'GET',
+          cache: 'no-store',
+          signal,
+        });
+        if (response.ok) return;
+        lastError = new Error(`Backend health check returned ${response.status}.`);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') throw error;
+        lastError = error;
+      }
+      if (attempt < 3) {
+        await waitFor(NETWORK_RETRY_DELAY_MS * attempt);
+      }
+    }
+    throw new Error(
+      isLikelyNetworkError(lastError)
+        ? 'The backend is waking up or unreachable right now. Please retry in a few seconds.'
+        : (lastError instanceof Error ? lastError.message : 'Backend health check failed.')
+    );
+  };
+
+  const readErrorMessage = async (response: Response, fallback: string) => {
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 429) {
+      return payload?.detail || 'Demo limit reached. Free users can run 5 investigations per day.';
+    }
+    if (response.status === 401) {
+      return payload?.detail || 'Please sign in again to continue.';
+    }
+    if (response.status === 403) {
+      return payload?.detail || 'Your account cannot run investigations right now.';
+    }
+    return payload?.detail || fallback;
   };
 
   const handleStopInvestigation = () => {
