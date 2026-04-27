@@ -164,6 +164,15 @@ def get_confidence_model() -> MonteCarloConfidenceModel:
 
 def require_evidence_model() -> None:
     classifier = get_evidence_classifier()
+    # When a remote endpoint is configured, local transformers availability is irrelevant.
+    if classifier.uses_remote_endpoint:
+        if REQUIRE_REAL_EVIDENCE_MODEL and not classifier.loaded:
+            detail = classifier.load_error or "Evidence endpoint did not load."
+            raise RuntimeError(
+                f"Real evidence model inference is required, but the evidence endpoint is not available in this environment. {detail}"
+            )
+        return
+
     if REQUIRE_REAL_EVIDENCE_MODEL and (not TRANSFORMERS_AVAILABLE or not classifier.loaded):
         detail = classifier.load_error or "Evidence classifier did not load."
         raise RuntimeError(
